@@ -19,8 +19,11 @@ module base_fv
       procedure(cons_to_prim), public, deferred, pass(self) :: prim
       procedure(flux), public, deferred, pass(self) :: iflux
       procedure(flux), public, deferred, pass(self) :: bflux
+      procedure(flux), public, deferred, pass(self) :: residual
+      procedure(flux), public, deferred, pass(self) :: bcs
       procedure(riemann_flux), deferred, pass(self) :: rsolve
       procedure(point_flux_x), deferred, pass(self) :: pflux_x
+      procedure(initial_cond), deferred, pass(self) :: init_sol
       
       procedure, public, nopass :: transform_to
       procedure, public, nopass :: transform_from
@@ -70,6 +73,13 @@ module base_fv
          real(kind=wp), intent(in) :: q(:)
          real(kind=wp) :: fx(size(q))
       end function point_flux_x
+      !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      subroutine initial_cond(self)
+         use precision
+         import fv_base
+         implicit none
+         class(fv_base), intent(inout) :: self
+      end subroutine initial_cond
       !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
    end interface
 

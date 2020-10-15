@@ -185,6 +185,7 @@ contains
    end function boundary_faces
    !**********************************************************************
    function normals(face,x) result(n)
+      use maths, only : l2norm
       implicit none
 
       integer(kind=wi), intent(in) :: face(:,:)
@@ -195,25 +196,24 @@ contains
       
       integer(kind=wi) :: nf,ie
 
-      real(kind=wp) :: xe(size(x,1)),nt(size(x,1)),l,a
+      real(kind=wp) :: xe(size(x,1)),nt(size(x,1)),l
       
       nf = size(face,2)
 
       do ie=1,nf
          xe = x(:,face(2,ie)) - x(:,face(1,ie))
 
-         a = xe(2)/xe(1)
-         nt(1) = sqrt(1e0_wp/(1e0_wp + a*a))
-         nt(2) = -nt(1)/a
+         nt(1) = -xe(2)
+         nt(2) =  xe(1)
          if((xe(1)*nt(2) - xe(2)*nt(1)) .gt. 0e0)then
             nt(1) = -nt(1)
             nt(2) = -nt(2)
          endif
 
-         l = sqrt(xe(1)*xe(1) + xe(2)*xe(2))
+         l  = l2norm(xe)/l2norm(nt)
          
          n(1,ie) = nt(1)*l
-         n(1,ie) = nt(2)*l
+         n(2,ie) = nt(2)*l
       enddo
             
       return

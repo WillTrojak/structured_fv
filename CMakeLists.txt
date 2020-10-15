@@ -6,7 +6,7 @@ endif()
 project(fr_1d
   LANGUAGES Fortran
   VERSION 2.0
-  DESCRIPTION "Structured FV Solver for Flow Equations")
+  DESCRIPTION "Unstructured FV Solver for Flow Equations")
 
 enable_language(Fortran)
   

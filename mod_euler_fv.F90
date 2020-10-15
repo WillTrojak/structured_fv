@@ -18,8 +18,11 @@ module euler_fv
       procedure, public, pass(self) :: prim => euler_cons_to_prim
       procedure, public, pass(self) :: iflux => euler_interior_flux
       procedure, public, pass(self) :: bflux => euler_boundary_flux
+      procedure, public, pass(self) :: bcs => euler_bcs
+      procedure, public, pass(self) :: residual => euler_residual
       procedure, public, pass(self) :: rsolve => rusanov_flux
       procedure, public, pass(self) :: pflux_x => euler_point_flux_x
+      procedure, public, pass(self) :: init_sol => euler_initial_cond
       
       procedure, public, pass(self) :: consts => compute_consts
    end type fv_euler
@@ -50,12 +53,33 @@ contains
       call self%consts(gamma)
       
       allocate(self%q(ne,self%omega%nv))
+      allocate(self%qb(ne,self%omega%nfb))
       allocate(self%df(ne,self%omega%nv))
          
       self%initd = .true.
       
       return
    end subroutine init_fv_euler
+   !**********************************************************************
+   subroutine euler_residual(self)
+      implicit none
+
+      class(fv_euler), intent(inout) :: self
+
+      integer(kind=wi) :: ie,ip
+      
+      do ie=1,self%omega%nv
+         do ip=1,self%ne
+            self%df(ip,ie) = 0e0_wp
+         enddo
+      enddo
+      
+      call self%iflux()
+      call self%bcs()
+      call self%bflux()
+      
+      return
+   end subroutine euler_residual
    !**********************************************************************
    subroutine compute_consts(self,gamma)
       implicit none
@@ -129,39 +153,6 @@ contains
       return
    end function euler_point_flux_x
    !**********************************************************************
-   function rusanov_flux(self,ql,qr) result(fc)
-      implicit none
-
-      class(fv_euler), intent(in) :: self
-      
-      real(kind=wp), intent(in) :: ql(:),qr(:)
-
-      real(kind=wp) :: fc(size(ql))
-
-      real(kind=wp) :: hl,fl(size(ql)),hr,fr(size(qr))
-      real(kind=wp) :: rrhosqrt,ub,hb,ab,s
-            
-      hl = self%gm1*(ql(4) - 0.5e0_wp*(ql(2)*ql(2) + ql(3)*ql(3))/ql(1))
-      hr = self%gm1*(qr(4) - 0.5e0_wp*(qr(2)*qr(2) + qr(3)*qr(3))/qr(1))
-      ! Roe average velocity and wave speed
-      rrhosqrt = 1e0_wp/(sqrt(ql(1)) + sqrt(qr(1)))
-      ub = (sqrt(qr(1))*ql(2) + sqrt(ql(1))*qr(2))*rrhosqrt*rrhosqrt
-      hb = (sqrt(ql(1))*hl + sqrt(qr(1))*hr)*rrhosqrt
-      ab = sqrt(self%gm1*(hb - 0.5e0_wp*ub*ub))
-
-      s = abs(ub) + ab
-
-      fl = self%pflux_x(ql)
-      fr = self%pflux_x(qr)
-      
-      fc(1) = 0.5e0_wp*(fl(1) + fr(1)) - 0.5e0_wp*s*(qr(1) - ql(1)) 
-      fc(2) = 0.5e0_wp*(fl(2) + fr(2)) - 0.5e0_wp*s*(qr(2) - ql(2))
-      fc(3) = 0.5e0_wp*(fl(3) + fr(3)) - 0.5e0_wp*s*(qr(3) - ql(3))
-      fc(4) = 0.5e0_wp*(fl(4) + fr(4)) - 0.5e0_wp*s*(qr(4) - ql(4))
-      
-      return
-   end function rusanov_flux
-   !**********************************************************************
    subroutine euler_interior_flux(self)
       use maths, only : l2norm
       implicit none
@@ -188,6 +179,7 @@ contains
 
          fct = self%rsolve(qlt,qrt)
          fc = self%transform_from(nu,fct)
+
          self%df(:,el) =  fc(:)*dl
          self%df(:,er) = -fc(:)*dl
       enddo
@@ -226,7 +218,40 @@ contains
       return
    end subroutine euler_boundary_flux
    !**********************************************************************
-   subroutine boundary_value(self)
+   function rusanov_flux(self,ql,qr) result(fc)
+      implicit none
+
+      class(fv_euler), intent(in) :: self
+      
+      real(kind=wp), intent(in) :: ql(:),qr(:)
+
+      real(kind=wp) :: fc(size(ql))
+
+      real(kind=wp) :: hl,fl(size(ql)),hr,fr(size(qr))
+      real(kind=wp) :: rrhosqrt,ub,hb,ab,s
+            
+      hl = self%gm1*(ql(4) - 0.5e0_wp*(ql(2)*ql(2) + ql(3)*ql(3))/ql(1))
+      hr = self%gm1*(qr(4) - 0.5e0_wp*(qr(2)*qr(2) + qr(3)*qr(3))/qr(1))
+      ! Roe average velocity and wave speed
+      rrhosqrt = 1e0_wp/(sqrt(ql(1)) + sqrt(qr(1)))
+      ub = (sqrt(qr(1))*ql(2) + sqrt(ql(1))*qr(2))*rrhosqrt*rrhosqrt
+      hb = (sqrt(ql(1))*hl + sqrt(qr(1))*hr)*rrhosqrt
+      ab = sqrt(self%gm1*(hb - 0.5e0_wp*ub*ub))
+
+      s = abs(ub) + ab
+
+      fl = self%pflux_x(ql)
+      fr = self%pflux_x(qr)
+      
+      fc(1) = 0.5e0_wp*(fl(1) + fr(1)) - 0.5e0_wp*s*(qr(1) - ql(1)) 
+      fc(2) = 0.5e0_wp*(fl(2) + fr(2)) - 0.5e0_wp*s*(qr(2) - ql(2))
+      fc(3) = 0.5e0_wp*(fl(3) + fr(3)) - 0.5e0_wp*s*(qr(3) - ql(3))
+      fc(4) = 0.5e0_wp*(fl(4) + fr(4)) - 0.5e0_wp*s*(qr(4) - ql(4))
+      
+      return
+   end function rusanov_flux
+   !**********************************************************************
+   subroutine euler_bcs(self)
       use maths, only : l2norm
       implicit none
       
@@ -235,8 +260,8 @@ contains
       integer(kind=wi) :: i,j,nf,nl,nb
       real(kind=wp) :: nu(self%omega%nd),rvdn
       real(kind=wp) :: r,ma,p
-      
-      nf = 0
+       
+      nf = 0     
       do j=1,self%omega%nj
          do i=1,self%omega%ni
             ! South
@@ -253,7 +278,7 @@ contains
 
                rvdn = self%q(2,nl)*nu(1) + self%q(3,nl)*nu(2)
                self%qb(2,nb) = self%q(2,nl) - rvdn*nu(1)
-               self%qb(3,nb) = self%q(3,nl) - rvdn*nu(1)
+               self%qb(3,nb) = self%q(3,nl) - rvdn*nu(2)
                
             endif
 
@@ -271,11 +296,11 @@ contains
 
                rvdn = self%q(2,nl)*nu(1) + self%q(3,nl)*nu(2)
                self%qb(2,nb) = self%q(2,nl) - rvdn*nu(1)
-               self%qb(3,nb) = self%q(3,nl) - rvdn*nu(1)               
+               self%qb(3,nb) = self%q(3,nl) - rvdn*nu(2)               
             endif
 
             ! West
-            if((i .ne. 1) .and. (j .ne. self%omega%nj))then
+            if((i .eq. 1) .and. (j .ne. self%omega%nj))then
                nf = nf + 1
                nl = self%omega%face_b(3,nf)
                nb = self%omega%face_b(4,nf)
@@ -287,7 +312,7 @@ contains
             endif
 
             ! East
-            if((i .ne. self%omega%ni) .and. (j .ne. self%omega%nj))then
+            if((i .eq. self%omega%ni) .and. (j .ne. self%omega%nj))then
                nf = nf + 1
                nl = self%omega%face_b(3,nf)
                nb = self%omega%face_b(4,nf)
@@ -304,7 +329,29 @@ contains
       enddo
       
       return
-   end subroutine boundary_value
+   end subroutine euler_bcs
+   !**********************************************************************
+   subroutine euler_initial_cond(self)
+      implicit none
+
+      class(fv_euler), intent(inout) :: self
+
+      integer(kind=wi) :: iv
+      real(kind=wp) :: r,ma,p
+      
+      r = 1e0_wp
+      ma = 2e0_wp
+      p = 1e0_wp
+
+      do iv=1,self%omega%nv
+         self%q(1,iv) = r
+         self%q(2,iv) = ma*sqrt(r*self%gamma*p)
+         self%q(3,iv) = 0e0_wp
+         self%q(4,iv) = 0.5e0_wp*self%q(2,iv)*self%q(2,iv)/r + p*self%rgm1
+      enddo
+
+      return
+   end subroutine euler_initial_cond
    !**********************************************************************
 end module euler_fv
  
