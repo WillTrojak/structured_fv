@@ -8,7 +8,6 @@ module erk_int
 
       integer(kind=wi) :: nrk,ne,nv,ir
       
-      real(kind=wp), allocatable :: q0(:,:)
       real(kind=wp), allocatable :: k(:,:,:)
 
       real(kind=wp), allocatable :: ab(:,:)
@@ -94,7 +93,6 @@ contains
       
       do iv=1,self%nv
          do ie=1,self%ne
-            if(self%ir .eq. 1) self%q0(ie,iv) = q(ie,iv)
             self%k(self%ir,ie,iv) = q(ie,iv)/dv(iv)
             
             eps = 0e0_wp

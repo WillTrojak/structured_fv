@@ -25,7 +25,9 @@ program main
    
    time%dt = 1e-3_wp
 
-   do it=1,10      
+   do it=1,10
+      call time%begin(space%q)
+      
       call space%residual()
       call time%integrate(space%omega%dv,space%df,space%q)
       
